@@ -154,7 +154,7 @@ def parse_status(homework):
         elif (homework_name in DCT_HWS
               and DCT_HWS[homework_name] == homework_status):
             logger.debug('Status of HW has not changed')
-            new_status = f'nothing changed'
+            new_status = (f'nothing changed')
             return new_status
         elif (homework_name in DCT_HWS
               and DCT_HWS[homework_name] != homework_status):

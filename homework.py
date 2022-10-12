@@ -8,18 +8,10 @@ from exceptions import ListOfHWsNull, MessageSendFailed, StatusNotFound
 from exceptions import NoKeysInResponse, NoListOfHWs
 from exceptions import NoTokensFound, UnknownAPIAnswer
 import sys
+import copy
 
 # ПРОЛОГ
 # Спасибо Вам !!!
-
-# handler = RotatingFileHandler('my.log', maxBytes=50000000, backupCount=5)
-# logger.setLevel(logging.DEBUG)
-# formatter = logging.Formatter(
-#    '%(asctime)s - %(levelname)s - %(message)s',
-# )
-# handler.setFormatter(formatter)
-# logger.addHandler(handler)
-
 
 load_dotenv()
 tg_token = os.getenv('TOKEN')
@@ -69,25 +61,6 @@ def get_api_answer(current_timestamp):
         hws = response.json()
     except Exception:
         raise ConnectionError('Не удалось подключиться')
-    #    if type(hws) is dict and response.status_code == 200:
-    #        logger.info('G_A_A made dict and S_C is 200')
-    #    else:
-    #        logger.error('Method didnt send dict')
-    # except Exception:
-    #    if response.status_code != 200:
-    #        logger.error('Api unable - status not 200')
-    #        raise ConnectionError
-    #    else:
-    #        logger.error('Didnt get response from API')
-    # return hws
-    # response = requests.get(ENDPOINT, headers=headers, params=params)
-    # hws = response.json()
-    # if type(hws) is not dict:
-    #    raise TypeError
-    # if not isinstance(hws, dict):
-    #    raise TypeError
-    # if response.status_code != 200:
-    #    raise ConnectionError
     return hws
 
 
@@ -96,16 +69,6 @@ def check_response(response):
     # response = get_api_answer()
     current_date = 'current_date'
     homeworks = 'homeworks'
-    # try:
-    #    if current_date and homeworks in response and type(response) is dict:
-    #        homework = response[homeworks]
-    #    #return homework
-    #    else:
-    #        logger.error(f'Data inst dict type')
-    #        raise TypeError(f'No data')
-    # except Exception:
-    #    logger.error('Response isnt as expected')
-    # return homework
     if not isinstance(response, dict):
         raise TypeError
     elif current_date and homeworks not in response:
@@ -123,37 +86,7 @@ def parse_status(homework):
             or 'status' not in homework):
         raise KeyError('No homework name or status at homework dict!')
     homework_name = homework['homework_name']
-    # check_response(homework_statuses)[0]['homework_name']
     homework_status = homework['status']
-    # check_response(homework_statuses)[0]['status']
-    # for objects in homework:
-    #    homework_name = objects['homework_name']
-    #    homework_status = objects['status']
-    #    return homework_name, homework_status
-    # если запись с кэша равна полученной записи, то пасс
-    # еlse вызываем функцию отправки сбщ
-    # можно добавлять в словарь, но тогда словарю пизда
-    # if homework_name not in DCT_HWS:
-    #    DCT_HWS[homework_name] = homework_status
-    #    # logger.error('New hw found, added to tracking')
-    #    new_status = (f'Изменился статус проверки работы "{homework_name}"'
-    #                  f'with status {HOMEWORK_STATUSES[homework_status]}')
-    #    return new_status
-    # elif (homework_name in DCT_HWS
-    #      and DCT_HWS[homework_name] == homework_status):
-    #    logger.debug('Status of HW has not changed')
-    #    new_status = ('nothing changed')
-    #    return new_status
-    # elif (homework_name in DCT_HWS
-    #      and DCT_HWS[homework_name] != homework_status):
-    #    DCT_HWS[homework_name] = homework_status
-    #    logger.error('HW status changed, added to dct')
-    #    new_status = (f'Изменился статус проверки работы '
-    #                  f'"{homework_name}". Новый статус:'
-    #                  f' {HOMEWORK_STATUSES[homework_status]}')
-    #    return new_status
-    # verdict = new_status
-    # return verdict
     if homework_status not in HOMEWORK_STATUSES:
         raise StatusNotFound('Неизвестный статус работы.')
     new_status = (f'Изменился статус проверки работы '
@@ -185,35 +118,37 @@ def check_tokens():
 def main():
     """Основная логика работы бота."""
     current_timestamp = int(time.time())
-    # try:
-    #    check_tokens()
-    # except NoTokensFound:
     if not check_tokens():
         logger.critical
         sys.exit()
     bot = Bot(token=TELEGRAM_TOKEN)
+    prev_report = ''
+    new_report = ''
     while True:
         try:
             response = get_api_answer(current_timestamp)
-            logger.error
             homework = check_response(response)
-            logger.error
             first_homework = homework[0]
-            message = parse_status(first_homework)
-            logger.error
-            # response = get_api_answer(current_timestamp)
-            # homework = check_response(response)
-            # first_homework = homework[0]
-            # message = parse_status(first_homework)
-            sender = send_message(bot, message)
+            new_report = parse_status(first_homework)
+            if prev_report != new_report:
+                sender = send_message(bot, new_report)
+                prev_report = copy.copy(new_report)
+                return sender
+            else:
+                prev_report = copy.copy(new_report)
+                return prev_report
             # current_timestamp = ...
-            logger.info('Сообщение отправлено')
-            return sender
         except Exception as error:
-            message = f'Сбой в работе программы: {error}'
-            logger.error
-            sender = send_message(bot, message)
-            return sender
+            new_report = f'Сбой в работе программы: {error}'
+            if prev_report != new_report:
+                sender = send_message(bot, new_report)
+                prev_report = copy.copy(new_report)
+                return sender
+            else:
+                prev_report = copy.copy(new_report)
+                return prev_report
+            # logger.error
+            # sender = send_message(bot, message)
         finally:
             time.sleep(RETRY_TIME)
 

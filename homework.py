@@ -1,36 +1,24 @@
-from logging.handlers import RotatingFileHandler
 from telegram import Bot
 import requests
 import os
 from dotenv import load_dotenv
 import time
 import logging
+from exceptions import ListOfHWsNull, MessageSendFailed, StatusNotFound
+from exceptions import NoKeysInResponse, NoListOfHWs
+from exceptions import NoTokensFound, UnknownAPIAnswer
+import sys
 
 # ПРОЛОГ
-# Я в великом отчаянии и на грани
-# Вложил много часов своих стараний, по-разному
-# переписывал свой код, чтобы оно работало
-# Но так и не смог написать работу, чтобы она
-# 1 - cоответствала pytest
-# 2 - работала
-# либо одно, либо второе. В общем
-# я заблудился в глубоком лесу и не могу выйти
-# просьба изучить черновую работу и направить на путь праведный
-# Так же приножу извинения за грязную и плохоработащую работу, попавшую к Вам
-# С уважением
-logging.basicConfig(
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    level=logging.INFO,
-    filename='main.log',
-)
-logger = logging.getLogger(__name__)
-handler = RotatingFileHandler('my.log', maxBytes=50000000, backupCount=5)
-logger.setLevel(logging.DEBUG)
-formatter = logging.Formatter(
-    '%(asctime)s - %(levelname)s - %(message)s',
-)
-handler.setFormatter(formatter)
-logger.addHandler(handler)
+# Спасибо Вам !!!
+
+# handler = RotatingFileHandler('my.log', maxBytes=50000000, backupCount=5)
+# logger.setLevel(logging.DEBUG)
+# formatter = logging.Formatter(
+#    '%(asctime)s - %(levelname)s - %(message)s',
+# )
+# handler.setFormatter(formatter)
+# logger.addHandler(handler)
 
 
 load_dotenv()
@@ -41,6 +29,7 @@ id_tg = os.getenv('MYID')
 PRACTICUM_TOKEN = ya_token
 TELEGRAM_TOKEN = tg_token
 TELEGRAM_CHAT_ID = id_tg
+TOKENS = [ya_token, tg_token, id_tg]
 
 RETRY_TIME = 600
 ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
@@ -61,10 +50,11 @@ def send_message(bot, message):
     chat_id = TELEGRAM_CHAT_ID
     text = message
     try:
+        logger.info('Sending message')
         bot.send_message(chat_id, text)
         logger.info('Message is sent')
-    except Exception as error:
-        logger.error(f'Error appeared while sending message. {error}')
+    except Exception:
+        raise MessageSendFailed
 
 
 def get_api_answer(current_timestamp):
@@ -72,11 +62,13 @@ def get_api_answer(current_timestamp):
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}  # timestamp
     headers = HEADERS
-    # if response.status_code != 200:
-    #    logger.critical('Api unable - status not 200')
-    # try:
-    #    response = requests.get(ENDPOINT, headers=headers, params=params)
-    #    hws = response.json()
+    try:
+        response = requests.get(ENDPOINT, headers=headers, params=params)
+        if response.status_code != 200:
+            raise UnknownAPIAnswer('Неизвестный ответ АPI')
+        hws = response.json()
+    except Exception:
+        raise ConnectionError('Не удалось подключиться')
     #    if type(hws) is dict and response.status_code == 200:
     #        logger.info('G_A_A made dict and S_C is 200')
     #    else:
@@ -88,14 +80,14 @@ def get_api_answer(current_timestamp):
     #    else:
     #        logger.error('Didnt get response from API')
     # return hws
-    response = requests.get(ENDPOINT, headers=headers, params=params)
-    hws = response.json()
+    # response = requests.get(ENDPOINT, headers=headers, params=params)
+    # hws = response.json()
     # if type(hws) is not dict:
     #    raise TypeError
     # if not isinstance(hws, dict):
     #    raise TypeError
-    if response.status_code != 200:
-        raise ConnectionError
+    # if response.status_code != 200:
+    #    raise ConnectionError
     return hws
 
 
@@ -114,106 +106,123 @@ def check_response(response):
     # except Exception:
     #    logger.error('Response isnt as expected')
     # return homework
-    if current_date and homeworks not in response:
+    if not isinstance(response, dict):
         raise TypeError
-    elif type(response) is not dict:
-        raise TypeError
-    elif not isinstance(response, dict):
-        raise TypeError
+    elif current_date and homeworks not in response:
+        raise NoKeysInResponse('Нет ключей в словаре')
     elif not isinstance(response[homeworks], list):
-        raise TypeError
-    elif response is None:
-        raise TypeError
+        raise NoListOfHWs('Не удалось получить список работ')
     elif not len(response[homeworks]):
-        raise TypeError
+        raise ListOfHWsNull('Список домашних работ пуст')
     return response.get('homeworks')
 
 
 def parse_status(homework):
     """Парсит ответ АПИ."""
-    if 'homework_name' and 'status' not in homework:
+    if ('homework_name' not in homework
+            or 'status' not in homework):
         raise KeyError('No homework name or status at homework dict!')
-    else:
-        homework_name = homework['homework_name']
-        # check_response(homework_statuses)[0]['homework_name']
-        homework_status = homework['status']
-        # check_response(homework_statuses)[0]['status']
-        # for objects in homework:
-        #    homework_name = objects['homework_name']
-        #    homework_status = objects['status']
-        #    return homework_name, homework_status
+    homework_name = homework['homework_name']
+    # check_response(homework_statuses)[0]['homework_name']
+    homework_status = homework['status']
+    # check_response(homework_statuses)[0]['status']
+    # for objects in homework:
+    #    homework_name = objects['homework_name']
+    #    homework_status = objects['status']
+    #    return homework_name, homework_status
     # если запись с кэша равна полученной записи, то пасс
     # еlse вызываем функцию отправки сбщ
     # можно добавлять в словарь, но тогда словарю пизда
-        if homework_name not in DCT_HWS:
-            DCT_HWS[homework_name] = homework_status
-        # logger.error('New hw found, added to tracking')
-            new_status = (f'Изменился статус проверки работы "{homework_name}"'
-                          f'with status {HOMEWORK_STATUSES[homework_status]}')
-            return new_status
-        elif (homework_name in DCT_HWS
-              and DCT_HWS[homework_name] == homework_status):
-            logger.debug('Status of HW has not changed')
-            new_status = ('nothing changed')
-            return new_status
-        elif (homework_name in DCT_HWS
-              and DCT_HWS[homework_name] != homework_status):
-            DCT_HWS[homework_name] = homework_status
-            logger.error('HW status changed, added to dct')
-            new_status = (f'Изменился статус проверки работы '
-                          f'"{homework_name}". Новый статус:'
-                          f' {HOMEWORK_STATUSES[homework_status]}')
-            return new_status
-        verdict = new_status
-        return verdict
+    # if homework_name not in DCT_HWS:
+    #    DCT_HWS[homework_name] = homework_status
+    #    # logger.error('New hw found, added to tracking')
+    #    new_status = (f'Изменился статус проверки работы "{homework_name}"'
+    #                  f'with status {HOMEWORK_STATUSES[homework_status]}')
+    #    return new_status
+    # elif (homework_name in DCT_HWS
+    #      and DCT_HWS[homework_name] == homework_status):
+    #    logger.debug('Status of HW has not changed')
+    #    new_status = ('nothing changed')
+    #    return new_status
+    # elif (homework_name in DCT_HWS
+    #      and DCT_HWS[homework_name] != homework_status):
+    #    DCT_HWS[homework_name] = homework_status
+    #    logger.error('HW status changed, added to dct')
+    #    new_status = (f'Изменился статус проверки работы '
+    #                  f'"{homework_name}". Новый статус:'
+    #                  f' {HOMEWORK_STATUSES[homework_status]}')
+    #    return new_status
+    # verdict = new_status
+    # return verdict
+    if homework_status not in HOMEWORK_STATUSES:
+        raise StatusNotFound('Неизвестный статус работы.')
+    new_status = (f'Изменился статус проверки работы '
+                  f'"{homework_name}". Новый статус:'
+                  f' {HOMEWORK_STATUSES[homework_status]}')
+    verdict = new_status
+    return verdict
 
 
 def check_tokens():
     """Проверяет доступность токенов."""
-    if PRACTICUM_TOKEN and TELEGRAM_CHAT_ID and TELEGRAM_TOKEN is not None:
-        return True
-    else:
-        logger.critical('No tokens inside')
-        return False
+    try:
+        if PRACTICUM_TOKEN and TELEGRAM_CHAT_ID and TELEGRAM_TOKEN is not None:
+            return True
+        else:
+            return False
+    except Exception:
+        raise NoTokensFound('No tokens inside')
+    # Встроенную функцию all() использовать нельзя, так как не проходит pytest,
+    # код возвращает True на тесте, когда pytest ожидает False
+    # toks = all(TOKENS)
+    # return toks
+    # for element in tokens:
+    #    if not element:
+    #        return True
+    # return False
 
 
 def main():
     """Основная логика работы бота."""
     current_timestamp = int(time.time())
+    # try:
+    #    check_tokens()
+    # except NoTokensFound:
+    if not check_tokens():
+        logger.critical
+        sys.exit()
     bot = Bot(token=TELEGRAM_TOKEN)
-    check_tokens()
     while True:
         try:
             response = get_api_answer(current_timestamp)
-        except Exception:
-            logger.error('Не удалось подключиться')
-        try:
+            logger.error
             homework = check_response(response)
-        except Exception:
-            logger.error('Не удалось получить список работ')
-        try:
+            logger.error
             first_homework = homework[0]
             message = parse_status(first_homework)
-        except Exception:
-            logger.error('Не удалось получить домашнюю работу')
-        try:
-            response = get_api_answer(current_timestamp)
-            homework = check_response(response)
-            first_homework = homework[0]
-            message = parse_status(first_homework)
+            logger.error
+            # response = get_api_answer(current_timestamp)
+            # homework = check_response(response)
+            # first_homework = homework[0]
+            # message = parse_status(first_homework)
             sender = send_message(bot, message)
             # current_timestamp = ...
             logger.info('Сообщение отправлено')
-            time.sleep(RETRY_TIME)
             return sender
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
+            logger.error
             sender = send_message(bot, message)
-            time.sleep(RETRY_TIME)
             return sender
-        # else:
-        #    bot.stop()
+        finally:
+            time.sleep(RETRY_TIME)
 
 
 if __name__ == '__main__':
+    # main()
+    logging.basicConfig(
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        level=logging.INFO,
+        filename='main.log')
+    logger = logging.getLogger(__name__)
     main()

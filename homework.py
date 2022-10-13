@@ -6,12 +6,8 @@ import time
 import logging
 from exceptions import ListOfHWsNull, MessageSendFailed, StatusNotFound
 from exceptions import NoKeysInResponse, NoListOfHWs
-from exceptions import NoTokensFound, UnknownAPIAnswer
+from exceptions import UnknownAPIAnswer
 import sys
-import copy
-
-# ПРОЛОГ
-# Спасибо Вам !!!
 
 load_dotenv()
 tg_token = os.getenv('TOKEN')
@@ -118,7 +114,7 @@ def main():
             new_report = parse_status(first_homework)
             if prev_report != new_report:
                 prev_report = new_report
-                send_message(bot, new_report) 
+                send_message(bot, new_report)
         except Exception as error:
             new_report = f'Сбой в работе программы: {error}'
             if prev_report != new_report:

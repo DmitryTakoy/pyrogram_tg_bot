@@ -21,7 +21,6 @@ id_tg = os.getenv('MYID')
 PRACTICUM_TOKEN = ya_token
 TELEGRAM_TOKEN = tg_token
 TELEGRAM_CHAT_ID = id_tg
-TOKENS = [ya_token, tg_token, id_tg]
 
 RETRY_TIME = 600
 ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
@@ -98,21 +97,8 @@ def parse_status(homework):
 
 def check_tokens():
     """Проверяет доступность токенов."""
-    try:
-        if PRACTICUM_TOKEN and TELEGRAM_CHAT_ID and TELEGRAM_TOKEN is not None:
-            return True
-        else:
-            return False
-    except Exception:
-        raise NoTokensFound('No tokens inside')
-    # Встроенную функцию all() использовать нельзя, так как не проходит pytest,
-    # код возвращает True на тесте, когда pytest ожидает False
-    # toks = all(TOKENS)
-    # return toks
-    # for element in tokens:
-    #    if not element:
-    #        return True
-    # return False
+    tokens_able = all([PRACTICUM_TOKEN, TELEGRAM_CHAT_ID, TELEGRAM_TOKEN])
+    return tokens_able
 
 
 def main():
@@ -131,24 +117,14 @@ def main():
             first_homework = homework[0]
             new_report = parse_status(first_homework)
             if prev_report != new_report:
-                sender = send_message(bot, new_report)
-                prev_report = copy.copy(new_report)
-                return sender
-            else:
-                prev_report = copy.copy(new_report)
-                return prev_report
-            # current_timestamp = ...
+                prev_report = new_report
+                send_message(bot, new_report) 
         except Exception as error:
             new_report = f'Сбой в работе программы: {error}'
             if prev_report != new_report:
-                sender = send_message(bot, new_report)
-                prev_report = copy.copy(new_report)
-                return sender
-            else:
-                prev_report = copy.copy(new_report)
-                return prev_report
-            # logger.error
-            # sender = send_message(bot, message)
+                send_message(bot, new_report)
+                prev_report = new_report
+            logger.error(new_report)
         finally:
             time.sleep(RETRY_TIME)
 
